@@ -30,22 +30,58 @@ namespace Orleans.Streams
         /// <param name="streamId">The stream identifier.</param>
         /// <param name="token">The token.</param>
         /// <returns>The queue cache cursor.</returns>
+        /// <exception cref="QueueCacheMissException">
+        /// The requested token is older than the messages retained by the cache.
+        /// </exception>
+        [Obsolete("Use TryGetCacheCursor instead.")]
         IQueueCacheCursor GetCacheCursor(StreamId streamId, StreamSequenceToken? token);
 
         /// <summary>
-        /// Acquires a stream message cursor at the specified subscription start position.
+        /// Attempts to acquire a stream message cursor at the location indicated by the provided token.
+        /// </summary>
+        /// <param name="streamId">The stream identifier.</param>
+        /// <param name="token">The token.</param>
+        /// <returns>
+        /// A successful result containing the acquired cursor, or a cache-miss result containing the
+        /// unavailable position and current cache bounds.
+        /// </returns>
+        QueueCacheCursorResult<IQueueCacheCursor> TryGetCacheCursor(StreamId streamId, StreamSequenceToken? token)
+        {
+            try
+            {
+#pragma warning disable CS0618 // Required for compatibility with providers which only implement the legacy method.
+                return QueueCacheCursorResult<IQueueCacheCursor>.FromCursor(GetCacheCursor(streamId, token));
+#pragma warning restore CS0618
+            }
+            catch (QueueCacheMissException exception)
+            {
+                return QueueCacheCursorResult<IQueueCacheCursor>.FromCacheMiss(
+                    new(exception.Requested, exception.Low, exception.High));
+            }
+        }
+
+        /// <summary>
+        /// Attempts to acquire a stream message cursor at the specified subscription start position.
         /// </summary>
         /// <param name="streamId">The stream identifier.</param>
         /// <param name="startPosition">The initial subscription position.</param>
-        /// <returns>The queue cache cursor.</returns>
-        /// <exception cref="NotSupportedException">
-        /// Thrown when <paramref name="startPosition"/> is not supported by this cache.
-        /// </exception>
-        IQueueCacheCursor GetCacheCursorAtPosition(StreamId streamId, StreamSubscriptionStartPosition startPosition)
+        /// <returns>
+        /// A successful result containing the acquired cursor, a cache-miss result containing the unavailable
+        /// position and current cache bounds, or <see cref="QueueCacheCursorResultKind.NotSupported"/>.
+        /// </returns>
+        /// <remarks>
+        /// The default implementation acquires the latest cursor using <see cref="TryGetCacheCursor"/>
+        /// with a null token. Providers support earliest positioning by implementing this method
+        /// and returning a cursor positioned inclusively at the oldest retained message for the stream.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="startPosition"/> is not defined.</exception>
+        QueueCacheCursorResult<IQueueCacheCursor> TryGetCacheCursorAtPosition(
+            StreamId streamId,
+            StreamSubscriptionStartPosition startPosition)
         {
             if (startPosition == StreamSubscriptionStartPosition.Latest)
             {
-                return GetCacheCursor(streamId, null);
+                return TryGetCacheCursor(streamId, null);
             }
 
             if (startPosition != StreamSubscriptionStartPosition.EarliestAvailable)
@@ -53,8 +89,7 @@ namespace Orleans.Streams
                 throw new ArgumentOutOfRangeException(nameof(startPosition), startPosition, "The subscription start position is not defined.");
             }
 
-            throw new NotSupportedException(
-                $"{GetType().FullName} does not support {StreamSubscriptionStartPosition.EarliestAvailable} cursor positioning.");
+            return QueueCacheCursorResult<IQueueCacheCursor>.NotSupported;
         }
 
         /// <summary>

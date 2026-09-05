@@ -57,9 +57,9 @@ For Azure Event Hubs, `EarliestAvailable` keeps the partition receiver and its c
 
 ## Handle queue cache support
 
-The built-in pooled, simple, memory, generator, and Event Hubs queue caches support `EarliestAvailable`. A custom persistent-stream cache participates by implementing <xref:Orleans.Streams.IQueueCache.GetCacheCursorAtPosition*>.
+The built-in pooled, simple, memory, generator, and Event Hubs queue caches support `EarliestAvailable`. A custom persistent-stream cache participates by implementing <xref:Orleans.Streams.IQueueCache.TryGetCacheCursorAtPosition*> and returning a successful cursor result positioned inclusively at the oldest retained message for the stream.
 
-The default queue-cache interface behavior maps `Latest` to the existing tokenless cursor path and reports <xref:System.NotSupportedException> for `EarliestAvailable`. An explicit subscription which requests the unsupported position receives the error and is faulted. When `EarliestAvailable` is the provider default for an implicit subscription, Orleans reports the error to the consumer and keeps the implicit subscription live at its current position.
+The default queue-cache interface behavior maps `Latest` to tokenless acquisition through <xref:Orleans.Streams.IQueueCache.TryGetCacheCursor*> and returns <xref:Orleans.Streams.QueueCacheCursorResultKind.NotSupported> for `EarliestAvailable`. The pulling agent translates an unsupported position into <xref:System.NotSupportedException> at the subscription boundary. An explicit subscription which requests the unsupported position receives the error and is faulted. When `EarliestAvailable` is the provider default for an implicit subscription, Orleans reports the error to the consumer and keeps the implicit subscription live at its current position.
 
 A custom <xref:Orleans.Streams.IAsyncObservable`1> implementation receives equivalent extension-overload compatibility: `Latest` uses its tokenless subscription path, and `EarliestAvailable` reports <xref:System.NotSupportedException> until the observable implements Orleans start-position subscriptions.
 
